@@ -137,6 +137,7 @@ app.post("/api/info", infoLimiter, (req, res) => {
     "--no-exec",           // never execute external commands
     "--no-batch-file",     // ignore batch files
     "--socket-timeout", "15",
+    "--extractor-args", "youtube:player_client=mediaconnect",
     url,
   ];
   const proc = spawn("yt-dlp", args, {
@@ -275,6 +276,7 @@ app.get("/api/download", downloadLimiter, (req, res) => {
     const ytArgs = [
       "--no-warnings", "--no-playlist", "--no-exec", "--no-batch-file",
       "--socket-timeout", "15",
+      "--extractor-args", "youtube:player_client=mediaconnect",
       "-f", "bestaudio",
       "-o", "-",
       url,
@@ -319,6 +321,7 @@ app.get("/api/download", downloadLimiter, (req, res) => {
     const ytArgs = [
       "--no-warnings", "--no-playlist", "--no-exec", "--no-batch-file",
       "--socket-timeout", "15",
+      "--extractor-args", "youtube:player_client=mediaconnect",
       "-f", "bestaudio[ext=m4a]/bestaudio",
       "-o", "-",
       url,
@@ -356,6 +359,7 @@ app.get("/api/download", downloadLimiter, (req, res) => {
   const args = [
     "--no-warnings", "--no-playlist", "--no-exec", "--no-batch-file",
     "--socket-timeout", "15",
+    "--extractor-args", "youtube:player_client=mediaconnect",
     "-f", formatStr,
     "--merge-output-format", "mp4",
     "--postprocessor-args", "ffmpeg:-c:v libx264 -c:a aac -movflags +faststart",
