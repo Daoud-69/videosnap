@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: videosnap-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: ALLOWED_ORIGINS
+        value: https://videosnap.vercel.app,https://videosnap-daoud-69.vercel.app

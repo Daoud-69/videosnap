@@ -1,4 +1,7 @@
 (() => {
+  // ── API base URL — empty string means same origin (local dev), or set to Render URL ──
+  const API_BASE = window.VIDEOSNAP_API || "";
+
   // ── Audio waveform background animation ──
   const canvas = document.getElementById("waveCanvas");
   const ctx = canvas.getContext("2d");
@@ -191,7 +194,7 @@
     setLoading(true);
 
     try {
-      const res = await fetch("/api/info", {
+      const res = await fetch(API_BASE + "/api/info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
@@ -268,7 +271,7 @@
   function startDownload(url, type, quality) {
     const params = new URLSearchParams({ url, type, quality });
     const a = document.createElement("a");
-    a.href = `/api/download?${params}`;
+    a.href = `${API_BASE}/api/download?${params}`;
     a.download = "";
     document.body.appendChild(a);
     a.click();

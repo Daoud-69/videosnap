@@ -7,8 +7,25 @@ const crypto = require("crypto");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 
+const cors = require("cors");
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ── CORS — allow frontend on Vercel to call this backend ──
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:3000")
+  .split(",")
+  .map((s) => s.trim());
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // Allow requests with no origin (curl, mobile apps) or from allowed list
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+      cb(new Error("Not allowed by CORS"));
+    },
+  })
+);
 
 // ── Security middleware ──
 
