@@ -123,65 +123,89 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", ytdlpVersion, ffmpegInstalled });
 });
 
+// ── YouTube client strategies (tried in order) ──
+const YT_CLIENTS = [
+  "web_creator",
+  "tv",
+  "ios",
+  "mediaconnect",
+  "default",
+];
+
+// Run yt-dlp with a specific client, returns a promise
+function runYtdlp(url, clientIdx = 0) {
+  return new Promise((resolve, reject) => {
+    const client = YT_CLIENTS[clientIdx] || "default";
+    const isYouTube = /youtu\.?be/.test(url);
+
+    const args = [
+      "--dump-json",
+      "--no-warnings",
+      "--no-playlist",
+      "--no-exec",
+      "--no-batch-file",
+      "--socket-timeout", "15",
+    ];
+
+    if (isYouTube) {
+      args.push("--extractor-args", `youtube:player_client=${client}`);
+    }
+
+    args.push(url);
+
+    const proc = spawn("yt-dlp", args, {
+      timeout: 30000,
+      env: { ...process.env, PATH: process.env.PATH },
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let stdoutSize = 0;
+    const MAX_OUTPUT = 5 * 1024 * 1024;
+
+    proc.stdout.on("data", (chunk) => {
+      stdoutSize += chunk.length;
+      if (stdoutSize > MAX_OUTPUT) { proc.kill(); return; }
+      stdout += chunk;
+    });
+    proc.stderr.on("data", (chunk) => (stderr += chunk));
+
+    const timer = setTimeout(() => { proc.kill(); }, 25000);
+
+    proc.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        const msg = stderr.toLowerCase();
+        const isAgeOrBot = msg.includes("age") || msg.includes("sign in") || msg.includes("bot") || msg.includes("confirm");
+
+        // If YouTube and we have more clients to try, retry
+        if (isYouTube && isAgeOrBot && clientIdx + 1 < YT_CLIENTS.length) {
+          return runYtdlp(url, clientIdx + 1).then(resolve).catch(reject);
+        }
+
+        reject({ stderr: msg, code });
+      } else {
+        resolve(stdout);
+      }
+    });
+
+    proc.on("error", (err) => {
+      clearTimeout(timer);
+      reject({ error: err });
+    });
+  });
+}
+
 // ── Video info ──
 
-app.post("/api/info", infoLimiter, (req, res) => {
+app.post("/api/info", infoLimiter, async (req, res) => {
   const { url } = req.body;
   if (!url || !isValidUrl(url))
     return res.status(400).json({ error: "A valid HTTP(S) URL is required" });
 
-  const args = [
-    "--dump-json",
-    "--no-warnings",
-    "--no-playlist",
-    "--no-exec",           // never execute external commands
-    "--no-batch-file",     // ignore batch files
-    "--socket-timeout", "15",
-    "--extractor-args", "youtube:player_client=mediaconnect",
-    url,
-  ];
-  const proc = spawn("yt-dlp", args, {
-    timeout: 30000,        // kill after 30s
-    env: { ...process.env, PATH: process.env.PATH },  // minimal env
-  });
-
-  let stdout = "";
-  let stderr = "";
-  let stdoutSize = 0;
-  const MAX_OUTPUT = 5 * 1024 * 1024; // 5MB max output
-
-  proc.stdout.on("data", (chunk) => {
-    stdoutSize += chunk.length;
-    if (stdoutSize > MAX_OUTPUT) {
-      proc.kill();
-      return;
-    }
-    stdout += chunk;
-  });
-  proc.stderr.on("data", (chunk) => (stderr += chunk));
-
-  // Kill if it takes too long
-  const timeout = setTimeout(() => {
-    proc.kill();
-    if (!res.headersSent)
-      res.status(504).json({ error: "Request timed out. The video may be too large or the site too slow." });
-  }, 30000);
-
-  proc.on("close", (code) => {
-    clearTimeout(timeout);
-    if (res.headersSent) return;
-
-    if (code !== 0) {
-      const msg = stderr.toLowerCase();
-      if (msg.includes("private"))
-        return res.status(403).json({ error: "This video is private" });
-      if (msg.includes("age") || msg.includes("sign in"))
-        return res.status(403).json({ error: "Age-restricted content — cannot access without login" });
-      if (msg.includes("unsupported url") || msg.includes("no video"))
-        return res.status(400).json({ error: "Unsupported or invalid URL" });
-      // Don't leak raw stderr to users — could contain system info
-      return res.status(500).json({ error: "Failed to fetch video info. The URL may be invalid or the site unsupported." });
-    }
+  try {
+    const stdout = await runYtdlp(url);
+    const code = 0;
 
     try {
       const data = JSON.parse(stdout);
@@ -239,16 +263,19 @@ app.post("/api/info", infoLimiter, (req, res) => {
     } catch (e) {
       res.status(500).json({ error: "Failed to parse video info" });
     }
-  });
-
-  proc.on("error", (err) => {
-    clearTimeout(timeout);
-    if (err.code === "ENOENT") {
+  } catch (err) {
+    if (res.headersSent) return;
+    const msg = err.stderr || "";
+    if (msg.includes("private"))
+      return res.status(403).json({ error: "This video is private" });
+    if (msg.includes("age") || msg.includes("sign in"))
+      return res.status(403).json({ error: "YouTube is blocking this request from our server. Try a non-YouTube platform, or use the app locally." });
+    if (msg.includes("unsupported url") || msg.includes("no video"))
+      return res.status(400).json({ error: "Unsupported or invalid URL" });
+    if (err.error && err.error.code === "ENOENT")
       return res.status(500).json({ error: "yt-dlp is not installed on the server" });
-    }
-    if (!res.headersSent)
-      res.status(500).json({ error: "Internal server error" });
-  });
+    return res.status(500).json({ error: "Failed to fetch video info. The URL may be invalid or the site unsupported." });
+  }
 });
 
 // ── Download ──
@@ -276,7 +303,7 @@ app.get("/api/download", downloadLimiter, (req, res) => {
     const ytArgs = [
       "--no-warnings", "--no-playlist", "--no-exec", "--no-batch-file",
       "--socket-timeout", "15",
-      "--extractor-args", "youtube:player_client=mediaconnect",
+      "--extractor-args", "youtube:player_client=web_creator,tv,ios",
       "-f", "bestaudio",
       "-o", "-",
       url,
@@ -321,7 +348,7 @@ app.get("/api/download", downloadLimiter, (req, res) => {
     const ytArgs = [
       "--no-warnings", "--no-playlist", "--no-exec", "--no-batch-file",
       "--socket-timeout", "15",
-      "--extractor-args", "youtube:player_client=mediaconnect",
+      "--extractor-args", "youtube:player_client=web_creator,tv,ios",
       "-f", "bestaudio[ext=m4a]/bestaudio",
       "-o", "-",
       url,
