@@ -6,4 +6,4 @@ services:
     dockerfilePath: ./Dockerfile
     envVars:
       - key: ALLOWED_ORIGINS
-        value: https://videosnap.vercel.app,https://videosnap-daoud-69.vercel.app,https://videosnap-daoud-69s-projects.vercel.app
+        value: https://videosnap-black.vercel.app,https://videosnap.vercel.app,https://videosnap-daoud-69.vercel.app
