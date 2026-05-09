@@ -4,3 +4,7 @@ node_modules/
 .DS_Store
 downloads/
 .claude/
+.agents/
+skills-lock.json
+package.json
+package-lock.json

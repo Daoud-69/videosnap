@@ -1,174 +1,329 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>VideoSnap — Universal Video Downloader</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VidDown — Download Any Video</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Background layers -->
+
+  <!-- Custom cursor -->
+  <div class="cursor-dot" id="cursorDot"></div>
+  <div class="cursor-ring" id="cursorRing"></div>
+
+  <!-- Three.js 3D canvas -->
+  <canvas id="bgCanvas"></canvas>
   <div class="bg-noise"></div>
-  <div class="bg-gradient"></div>
-  <canvas id="waveCanvas"></canvas>
+  <div class="bg-glow-orb bg-glow-orb--1"></div>
+  <div class="bg-glow-orb bg-glow-orb--2"></div>
 
   <div class="app">
-    <!-- Nav -->
-    <nav>
+
+    <!-- ── NAV ── -->
+    <nav class="nav" id="nav">
       <div class="nav-logo">
-        <div class="nav-logo-icon">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <circle cx="14" cy="14" r="13" stroke="var(--accent)" stroke-width="2"/>
-            <path d="M11 9l9 5-9 5V9z" fill="var(--accent)"/>
+        <div class="logo-icon">
+          <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+            <circle cx="15" cy="15" r="14" stroke="var(--accent)" stroke-width="1.5"/>
+            <path d="M12 10l10 5-10 5V10z" fill="var(--accent)"/>
           </svg>
         </div>
-        <span class="nav-brand">VIDEOSNAP</span>
+        <span class="logo-text">VIDDOWN</span>
       </div>
-      <div class="nav-links">
-        <span class="nav-status"><span class="status-dot"></span> 1000+ Sites</span>
-        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-          <span class="toggle-track">
-            <span class="toggle-thumb"></span>
-          </span>
+      <div class="nav-right">
+        <span class="nav-status"><span class="status-dot"></span>1000+ Sites</span>
+        <button class="theme-btn" id="themeToggle" aria-label="Toggle theme">
+          <span class="theme-track"><span class="theme-thumb"></span></span>
+          <span class="theme-icon sun">☀</span>
+          <span class="theme-icon moon">☽</span>
         </button>
       </div>
     </nav>
 
-    <!-- Hero -->
-    <section class="hero">
-      <div class="hero-badge">
-        <span class="badge-dot"></span>
-        Universal Media Downloader
+    <!-- ── HERO ── -->
+    <section class="hero" id="hero">
+      <!-- Decorative oversized background text -->
+      <div class="hero-deco-text" aria-hidden="true">DOWNLOAD</div>
+
+      <div class="hero-content">
+        <div class="hero-badge" id="heroBadge">
+          <span class="badge-dot"></span>
+          <span>Universal Media Downloader</span>
+        </div>
+
+        <h1 class="hero-title">
+          <span class="t-line" id="tl1"><span class="split-wrap">Download</span></span>
+          <span class="t-line accent-text" id="tl2"><span class="split-wrap">Any Video.</span></span>
+          <span class="t-line outline-text" id="tl3"><span class="split-wrap">Any Platform.</span></span>
+        </h1>
+
+        <p class="hero-sub" id="heroSub">
+          YouTube, Instagram, TikTok, Facebook, Twitter &amp; 1000+ more.<br/>
+          Paste a link — pick a format — download instantly. No accounts. No limits.
+        </p>
+
+        <!-- ── SEARCH CARD ── -->
+        <div class="search-card" id="searchCard">
+          <div class="platform-badge hidden" id="platformBadge">
+            <span id="platformIcon"></span>
+            <span id="platformName"></span>
+            <span class="badge-ring"></span>
+          </div>
+          <div class="search-row">
+            <div class="input-wrap">
+              <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              <input type="url" id="urlInput" placeholder="Paste any video URL…" autocomplete="off" spellcheck="false"/>
+            </div>
+            <button id="fetchBtn" class="fetch-btn" disabled>
+              <span class="btn-label">Analyze</span>
+              <span class="btn-spinner hidden"></span>
+              <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+          <div class="search-hints">
+            <span class="hint">youtube.com</span>
+            <span class="hint">instagram.com</span>
+            <span class="hint">tiktok.com</span>
+            <span class="hint">twitter.com</span>
+            <span class="hint">facebook.com</span>
+          </div>
+        </div>
+
+        <div id="errorMsg" class="error-msg hidden"></div>
+
+        <!-- ── STATS ── -->
+        <div class="stats-row" id="statsRow">
+          <div class="stat-card">
+            <div class="stat-val"><span class="count-num" data-target="1000">0</span><span>+</span></div>
+            <div class="stat-label">Supported Sites</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-card">
+            <div class="stat-val">4K</div>
+            <div class="stat-label">Max Resolution</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-card">
+            <div class="stat-val">320<span class="stat-small">kbps</span></div>
+            <div class="stat-label">Audio Quality</div>
+          </div>
+        </div>
       </div>
-      <h1 class="hero-title">
-        Grab Any<br/>
-        <span class="title-accent">Video.</span> Any<br/>
-        <span class="title-outline">Platform.</span>
-      </h1>
-      <p class="hero-sub">From YouTube to TikTok, SoundCloud to Twitch — paste a link, pick a format, download instantly. No accounts. No limits.</p>
 
-      <!-- Search card -->
-      <div class="search-card" id="searchCard">
-        <div class="platform-detect" id="platformBadge">
-          <span class="platform-icon" id="platformIcon"></span>
-          <span class="platform-name" id="platformName"></span>
-          <span class="detect-pulse"></span>
-        </div>
-        <div class="search-row">
-          <input
-            type="url"
-            id="urlInput"
-            placeholder="Paste video or audio URL here…"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <button id="fetchBtn" disabled>
-            <span class="btn-text">Fetch</span>
-            <span class="btn-spinner hidden"></span>
-            <svg class="btn-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </button>
-        </div>
+      <!-- Scroll cue -->
+      <div class="scroll-cue" id="scrollCue">
+        <span>Scroll</span>
+        <div class="scroll-arrow"></div>
       </div>
+    </section>
 
-      <div id="errorMsg" class="error-msg hidden"></div>
-
-      <!-- Stats row -->
-      <div class="stats-row">
-        <div class="stat-card">
-          <span class="stat-number">1000+</span>
-          <span class="stat-label">Supported Sites</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-number">4K</span>
-          <span class="stat-label">Max Resolution</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-number">320k</span>
-          <span class="stat-label">Audio Bitrate</span>
+    <!-- ── MARQUEE ── -->
+    <section class="marquee-section">
+      <div class="marquee-label">Works with every major platform</div>
+      <div class="marquee-outer">
+        <div class="marquee-track" id="marqueeTrack">
+          <span class="m-chip">▶ YouTube</span>
+          <span class="m-chip">📷 Instagram</span>
+          <span class="m-chip">♪ TikTok</span>
+          <span class="m-chip">𝕏 Twitter / X</span>
+          <span class="m-chip">f Facebook</span>
+          <span class="m-chip">▷ Vimeo</span>
+          <span class="m-chip">☁ SoundCloud</span>
+          <span class="m-chip">⬡ Reddit</span>
+          <span class="m-chip">◆ Twitch</span>
+          <span class="m-chip">B Bilibili</span>
+          <span class="m-chip">D Dailymotion</span>
+          <span class="m-chip">P Pinterest</span>
+          <span class="m-chip accent-chip">+ 1000 more</span>
         </div>
       </div>
     </section>
 
-    <!-- Platforms strip -->
-    <section class="platforms-strip">
-      <div class="strip-label">Supported Platforms</div>
-      <div class="strip-scroll">
-        <div class="strip-track">
-          <span class="p-chip">YouTube</span>
-          <span class="p-chip">Instagram</span>
-          <span class="p-chip">TikTok</span>
-          <span class="p-chip">Twitter / X</span>
-          <span class="p-chip">Facebook</span>
-          <span class="p-chip">Vimeo</span>
-          <span class="p-chip">SoundCloud</span>
-          <span class="p-chip">Reddit</span>
-          <span class="p-chip">Twitch</span>
-          <span class="p-chip">Bilibili</span>
-          <span class="p-chip">Dailymotion</span>
-          <span class="p-chip">Pinterest</span>
-          <span class="p-chip accent-chip">+ 1000 more</span>
+    <!-- ── HOW IT WORKS ── -->
+    <section class="how-section" id="howSection">
+      <div class="section-intro">
+        <span class="section-tag">Simple Process</span>
+        <h2 class="section-h2">Three steps to<br/><em>any download</em></h2>
+      </div>
+      <div class="steps-grid">
+        <div class="step-card" data-scroll-reveal>
+          <div class="step-number">01</div>
+          <div class="step-icon-box">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <h3>Paste the URL</h3>
+          <p>Copy the link from any platform and paste it into the input field above.</p>
+        </div>
+        <div class="step-connector" data-scroll-reveal></div>
+        <div class="step-card" data-scroll-reveal>
+          <div class="step-number">02</div>
+          <div class="step-icon-box">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>
+          </div>
+          <h3>Choose Format</h3>
+          <p>Select your resolution (up to 4K) or audio quality (MP3 320kbps, M4A).</p>
+        </div>
+        <div class="step-connector" data-scroll-reveal></div>
+        <div class="step-card" data-scroll-reveal>
+          <div class="step-number">03</div>
+          <div class="step-icon-box">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <h3>Download</h3>
+          <p>Hit download and your file saves instantly. No sign-up, no watermark, no limit.</p>
         </div>
       </div>
     </section>
 
-    <!-- Footer -->
-    <footer>
-      <span>Built with yt-dlp</span>
-      <span class="footer-dot"></span>
-      <span>No API keys required</span>
+    <!-- ── FEATURES ── -->
+    <section class="features-section" id="featuresSection">
+      <div class="section-intro">
+        <span class="section-tag">Why VidDown</span>
+        <h2 class="section-h2">Everything you<br/><em>need</em></h2>
+      </div>
+      <div class="features-grid">
+        <div class="feat-card tilt-card" data-scroll-reveal>
+          <div class="feat-glow"></div>
+          <div class="feat-icon">🎬</div>
+          <h3>4K Quality</h3>
+          <p>Download at maximum resolution — 4K, 2K, 1080p, 720p, 480p, 360p.</p>
+        </div>
+        <div class="feat-card tilt-card" data-scroll-reveal>
+          <div class="feat-glow"></div>
+          <div class="feat-icon">🎵</div>
+          <h3>MP3 Extraction</h3>
+          <p>Extract audio in MP3 320kbps or M4A from any video with pristine quality.</p>
+        </div>
+        <div class="feat-card tilt-card" data-scroll-reveal>
+          <div class="feat-glow"></div>
+          <div class="feat-icon">⚡</div>
+          <h3>Instant Preview</h3>
+          <p>See the thumbnail, title, uploader and all available formats before you download.</p>
+        </div>
+        <div class="feat-card tilt-card" data-scroll-reveal>
+          <div class="feat-glow"></div>
+          <div class="feat-icon">🔒</div>
+          <h3>No Sign Up</h3>
+          <p>Zero accounts. Zero tracking. Zero ads. Just paste the URL and go.</p>
+        </div>
+        <div class="feat-card tilt-card" data-scroll-reveal>
+          <div class="feat-glow"></div>
+          <div class="feat-icon">🌐</div>
+          <h3>1000+ Sites</h3>
+          <p>Powered by yt-dlp — supports virtually every major video and audio platform.</p>
+        </div>
+        <div class="feat-card tilt-card" data-scroll-reveal>
+          <div class="feat-glow"></div>
+          <div class="feat-icon">📱</div>
+          <h3>Fully Responsive</h3>
+          <p>Works seamlessly on desktop, tablet, and mobile. Any screen, any device.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CTA ── -->
+    <section class="cta-section" id="ctaSection" data-scroll-reveal>
+      <div class="cta-inner">
+        <h2>Ready to download?</h2>
+        <p>No sign-up required. Free forever.</p>
+        <a href="#hero" class="cta-btn" id="ctaBtn" onclick="document.getElementById('urlInput').focus();return false;">
+          Start Downloading
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+    </section>
+
+    <!-- ── FOOTER ── -->
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <svg width="22" height="22" viewBox="0 0 30 30" fill="none">
+            <circle cx="15" cy="15" r="14" stroke="var(--accent)" stroke-width="1.5"/>
+            <path d="M12 10l10 5-10 5V10z" fill="var(--accent)"/>
+          </svg>
+          <span>VIDDOWN</span>
+        </div>
+        <div class="footer-meta">
+          <span>Built with yt-dlp</span>
+          <span class="dot">·</span>
+          <span>No API keys required</span>
+          <span class="dot">·</span>
+          <span>Open Source</span>
+        </div>
+      </div>
     </footer>
-  </div>
 
-  <!-- Modal -->
+  </div><!-- /app -->
+
+  <!-- ── MODAL ── -->
   <div class="modal-overlay hidden" id="modalOverlay">
     <div class="modal" id="modal">
-      <button class="modal-close" id="modalClose">
+      <button class="modal-close-btn" id="modalClose" aria-label="Close">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
 
-      <div class="modal-thumb">
-        <img id="thumbImg" alt="Thumbnail" />
-        <div class="thumb-play">
-          <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-            <circle cx="26" cy="26" r="25" fill="rgba(0,0,0,0.5)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
-            <path d="M21 16l14 10-14 10V16z" fill="#fff"/>
-          </svg>
+      <!-- Preview area -->
+      <div class="modal-preview-area">
+        <div class="preview-thumb-wrap" id="thumbWrap">
+          <img id="thumbImg" alt="Video thumbnail" />
+          <button class="play-overlay-btn" id="playOverlayBtn" aria-label="Play preview">
+            <svg width="48" height="48" viewBox="0 0 64 64" fill="none">
+              <circle cx="32" cy="32" r="31" fill="rgba(0,0,0,0.5)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+              <path d="M26 20l20 12-20 12V20z" fill="white"/>
+            </svg>
+          </button>
+          <div class="thumb-fade"></div>
+          <span class="duration-tag" id="durationBadge"></span>
         </div>
-        <div class="thumb-gradient"></div>
-        <span class="thumb-duration" id="durationBadge"></span>
+        <div class="embed-wrap hidden" id="embedWrap">
+          <iframe id="embedFrame" frameborder="0" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+          <button class="embed-close-btn" id="embedCloseBtn">← Back to info</button>
+        </div>
       </div>
 
-      <div class="modal-content">
-        <h2 class="modal-title" id="videoTitle"></h2>
-        <div class="modal-meta">
-          <span class="meta-chip" id="uploader"></span>
-          <span class="meta-chip" id="views"></span>
+      <!-- Modal info -->
+      <div class="modal-info">
+        <h2 class="modal-vid-title" id="videoTitle"></h2>
+        <div class="modal-meta-row">
+          <span class="meta-tag" id="uploader"></span>
+          <span class="meta-tag" id="views"></span>
         </div>
 
-        <div class="format-block">
-          <div class="format-header">
-            <span class="format-label">Video</span>
-            <span class="format-line"></span>
+        <div class="dl-section">
+          <div class="dl-section-header">
+            <span class="dl-type-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+              Video
+            </span>
+            <div class="dl-divider"></div>
           </div>
-          <div class="format-grid" id="videoFormats"></div>
+          <div class="dl-grid" id="videoFormats"></div>
         </div>
 
-        <div class="format-block">
-          <div class="format-header">
-            <span class="format-label">Audio</span>
-            <span class="format-line"></span>
+        <div class="dl-section">
+          <div class="dl-section-header">
+            <span class="dl-type-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              Audio
+            </span>
+            <div class="dl-divider"></div>
           </div>
-          <div class="format-grid" id="audioFormats"></div>
+          <div class="dl-grid" id="audioFormats"></div>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Toast -->
-  <div id="toast" class="toast hidden"></div>
+  <div class="toast hidden" id="toast"></div>
 
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>

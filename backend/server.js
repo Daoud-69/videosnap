@@ -149,11 +149,39 @@ const YT_CLIENTS = [
   "default",
 ];
 
+// Detect platform from URL for targeted error messages
+function detectPlatform(url) {
+  if (/youtu\.?be/.test(url))        return "youtube";
+  if (/instagram\.com/.test(url))    return "instagram";
+  if (/tiktok\.com/.test(url))       return "tiktok";
+  if (/twitter\.com|x\.com/.test(url)) return "twitter";
+  if (/reddit\.com|v\.redd\.it/.test(url)) return "reddit";
+  if (/facebook\.com|fb\.watch/.test(url)) return "facebook";
+  if (/vimeo\.com/.test(url))        return "vimeo";
+  if (/soundcloud\.com/.test(url))   return "soundcloud";
+  if (/dailymotion\.com/.test(url))  return "dailymotion";
+  if (/twitch\.tv/.test(url))        return "twitch";
+  if (/bilibili\.com|b23\.tv/.test(url)) return "bilibili";
+  if (/pinterest\./i.test(url))      return "pinterest";
+  return "unknown";
+}
+
+// Platform-specific friendly error messages
+const PLATFORM_ERRORS = {
+  instagram: "Instagram requires you to be logged in. Open Instagram in your browser, log in, then try again — the downloader will use your session.",
+  twitter:   "Twitter/X now requires login to download videos. Log into X in your browser and retry.",
+  reddit:    "Reddit video is unavailable — it may be deleted, private, or geo-restricted.",
+  bilibili:  "This Bilibili video is geo-restricted and not available in your region.",
+  pinterest: "This Pinterest pin doesn't contain a downloadable video, or the pin is unavailable.",
+  twitch:    "This Twitch clip or VOD has expired or is subscriber-only.",
+};
+
 // Run yt-dlp with a specific client, returns a promise
-function runYtdlp(url, clientIdx = 0) {
+function runYtdlp(url, clientIdx = 0, useCookies = false) {
   return new Promise((resolve, reject) => {
     const client = YT_CLIENTS[clientIdx] || "default";
-    const isYouTube = /youtu\.?be/.test(url);
+    const platform = detectPlatform(url);
+    const isYouTube = platform === "youtube";
 
     const args = [
       "--dump-json",
@@ -166,6 +194,11 @@ function runYtdlp(url, clientIdx = 0) {
 
     if (isYouTube) {
       args.push("--extractor-args", `youtube:player_client=${client}`);
+    }
+
+    // Use browser cookies for platforms that need auth
+    if (useCookies) {
+      args.push("--cookies-from-browser", "chrome");
     }
 
     args.push(url);
@@ -194,13 +227,21 @@ function runYtdlp(url, clientIdx = 0) {
       if (code !== 0) {
         const msg = stderr.toLowerCase();
         const isAgeOrBot = msg.includes("age") || msg.includes("sign in") || msg.includes("bot") || msg.includes("confirm");
+        const needsAuth = msg.includes("login") || msg.includes("cookie") || msg.includes("csrf")
+                       || msg.includes("empty media") || msg.includes("404")
+                       || msg.includes("no video could be found");
 
-        // If YouTube and we have more clients to try, retry
+        // YouTube: retry with next client
         if (isYouTube && isAgeOrBot && clientIdx + 1 < YT_CLIENTS.length) {
-          return runYtdlp(url, clientIdx + 1).then(resolve).catch(reject);
+          return runYtdlp(url, clientIdx + 1, useCookies).then(resolve).catch(reject);
         }
 
-        reject({ stderr: msg, code });
+        // Instagram / Twitter: retry with browser cookies on first attempt
+        if (!useCookies && needsAuth && (platform === "instagram" || platform === "twitter")) {
+          return runYtdlp(url, clientIdx, true).then(resolve).catch(reject);
+        }
+
+        reject({ stderr: msg, code, platform });
       } else {
         resolve(stdout);
       }
@@ -282,16 +323,26 @@ app.post("/api/info", infoLimiter, async (req, res) => {
     }
   } catch (err) {
     if (res.headersSent) return;
-    const msg = err.stderr || "";
-    if (msg.includes("private"))
-      return res.status(403).json({ error: "This video is private" });
-    if (msg.includes("age") || msg.includes("sign in"))
-      return res.status(403).json({ error: "YouTube is blocking this request from our server. Try a non-YouTube platform, or use the app locally." });
-    if (msg.includes("unsupported url") || msg.includes("no video"))
-      return res.status(400).json({ error: "Unsupported or invalid URL" });
+    const msg  = err.stderr || "";
+    const plat = err.platform || detectPlatform(url);
+
+    // Platform-specific known errors
+    if (PLATFORM_ERRORS[plat]) {
+      return res.status(403).json({ error: PLATFORM_ERRORS[plat] });
+    }
+    if (msg.includes("private") || msg.includes("members only"))
+      return res.status(403).json({ error: "This video is private or members-only." });
+    if (msg.includes("geo") || msg.includes("not available in your country") || msg.includes("geo-restricted"))
+      return res.status(403).json({ error: "This video is geo-restricted and not available in your region." });
+    if (msg.includes("age") || msg.includes("sign in") || msg.includes("confirm your age"))
+      return res.status(403).json({ error: "This video requires age verification or login." });
+    if (msg.includes("unsupported url") || msg.includes("no video could be found") || msg.includes("no suitable"))
+      return res.status(400).json({ error: "No downloadable video found at this URL." });
+    if (msg.includes("404") || msg.includes("not found"))
+      return res.status(404).json({ error: "Video not found — it may have been deleted or the URL is wrong." });
     if (err.error && err.error.code === "ENOENT")
-      return res.status(500).json({ error: "yt-dlp is not installed on the server" });
-    return res.status(500).json({ error: "Failed to fetch video info. The URL may be invalid or the site unsupported." });
+      return res.status(500).json({ error: "yt-dlp is not installed on the server." });
+    return res.status(500).json({ error: "Could not fetch video info. The video may be private, deleted, or region-locked." });
   }
 });
 
