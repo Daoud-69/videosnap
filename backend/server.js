@@ -141,12 +141,13 @@ app.get("/api/health", (_req, res) => {
 });
 
 // ── YouTube client strategies (tried in order) ──
+// ios bypasses datacenter IP detection best on cloud servers
 const YT_CLIENTS = [
+  "ios",
+  "tv_embedded",
   "web_creator",
   "tv",
-  "ios",
   "mediaconnect",
-  "default",
 ];
 
 // Detect platform from URL for targeted error messages
@@ -189,11 +190,16 @@ function runYtdlp(url, clientIdx = 0, useCookies = false) {
       "--no-playlist",
       "--no-exec",
       "--no-batch-file",
-      "--socket-timeout", "15",
+      "--socket-timeout", "20",
     ];
 
     if (isYouTube) {
       args.push("--extractor-args", `youtube:player_client=${client}`);
+      // Spoof a mobile user-agent to avoid datacenter detection
+      args.push(
+        "--add-headers",
+        "User-Agent:Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+      );
     }
 
     // Use browser cookies for platforms that need auth
@@ -204,7 +210,7 @@ function runYtdlp(url, clientIdx = 0, useCookies = false) {
     args.push(url);
 
     const proc = spawn("yt-dlp", args, {
-      timeout: 30000,
+      timeout: 35000,
       env: { ...process.env, PATH: process.env.PATH },
     });
 
@@ -226,13 +232,12 @@ function runYtdlp(url, clientIdx = 0, useCookies = false) {
       clearTimeout(timer);
       if (code !== 0) {
         const msg = stderr.toLowerCase();
-        const isAgeOrBot = msg.includes("age") || msg.includes("sign in") || msg.includes("bot") || msg.includes("confirm");
         const needsAuth = msg.includes("login") || msg.includes("cookie") || msg.includes("csrf")
                        || msg.includes("empty media") || msg.includes("404")
                        || msg.includes("no video could be found");
 
-        // YouTube: retry with next client
-        if (isYouTube && isAgeOrBot && clientIdx + 1 < YT_CLIENTS.length) {
+        // YouTube: retry with every client on ANY failure (cloud IPs get blocked broadly)
+        if (isYouTube && clientIdx + 1 < YT_CLIENTS.length) {
           return runYtdlp(url, clientIdx + 1, useCookies).then(resolve).catch(reject);
         }
 
@@ -370,8 +375,8 @@ app.get("/api/download", downloadLimiter, (req, res) => {
   if (type === "mp3") {
     const ytArgs = [
       "--no-warnings", "--no-playlist", "--no-exec", "--no-batch-file",
-      "--socket-timeout", "15",
-      "--extractor-args", "youtube:player_client=web_creator,tv,ios",
+      "--socket-timeout", "20",
+      "--extractor-args", "youtube:player_client=ios,tv_embedded,web_creator,tv",
       "-f", "bestaudio",
       "-o", "-",
       url,
@@ -415,8 +420,8 @@ app.get("/api/download", downloadLimiter, (req, res) => {
   if (type === "m4a") {
     const ytArgs = [
       "--no-warnings", "--no-playlist", "--no-exec", "--no-batch-file",
-      "--socket-timeout", "15",
-      "--extractor-args", "youtube:player_client=web_creator,tv,ios",
+      "--socket-timeout", "20",
+      "--extractor-args", "youtube:player_client=ios,tv_embedded,web_creator,tv",
       "-f", "bestaudio[ext=m4a]/bestaudio",
       "-o", "-",
       url,
@@ -450,17 +455,29 @@ app.get("/api/download", downloadLimiter, (req, res) => {
   const tmpId = crypto.randomBytes(16).toString("hex");
   const tmpFile = path.join(os.tmpdir(), `videosnap-${tmpId}.mp4`);
 
+  const platform = detectPlatform(url);
+  const isYouTube = platform === "youtube";
+
   const formatStr = `bestvideo[height<=${height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height<=${height}][vcodec^=avc1]+bestaudio/bestvideo[height<=${height}]+bestaudio/best[height<=${height}]/best`;
   const args = [
     "--no-warnings", "--no-playlist", "--no-exec", "--no-batch-file",
-    "--socket-timeout", "15",
-    "--extractor-args", "youtube:player_client=mediaconnect",
+    "--socket-timeout", "20",
+    // Use ios client first — best for bypassing cloud datacenter blocks on YouTube
+    "--extractor-args", "youtube:player_client=ios,tv_embedded,web_creator,tv",
     "-f", formatStr,
     "--merge-output-format", "mp4",
     "--postprocessor-args", "ffmpeg:-c:v libx264 -c:a aac -movflags +faststart",
     "-o", tmpFile,
-    url,
   ];
+
+  if (isYouTube) {
+    args.push(
+      "--add-headers",
+      "User-Agent:Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    );
+  }
+
+  args.push(url);
 
   const proc = spawn("yt-dlp", args);
 
