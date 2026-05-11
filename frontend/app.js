@@ -648,11 +648,19 @@
     ];
 
     videoFormats.innerHTML = "";
+    // Find best available resolution for "BEST" badge
+    const bestHeight = data.availableResolutions.length
+      ? Math.max(...data.availableResolutions)
+      : null;
     resolutions.forEach((r) => {
       const available = data.availableResolutions.includes(r.height);
       const btn = document.createElement("button");
       btn.className = `dl-btn${available ? "" : " unavailable"}`;
       btn.textContent = r.label;
+      // Tag the best available quality
+      if (available && r.height === bestHeight && r.height >= 1080) {
+        btn.setAttribute("data-best", "BEST");
+      }
       if (available) {
         btn.addEventListener("click", () => startDownload(currentUrl, "mp4", `${r.height}p`));
       }
@@ -748,8 +756,10 @@
   }
 
   // ────────────────────────────────────────
-  // Nav scroll effect
+  // Nav scroll effect + page progress bar
   // ────────────────────────────────────────
+  const progressBar = document.getElementById("pageProgress");
+
   window.addEventListener("scroll", () => {
     const nav = document.getElementById("nav");
     if (window.scrollY > 60) {
@@ -759,6 +769,14 @@
         : "rgba(244,244,252,0.92)";
     } else {
       nav.style.background = "";
+    }
+
+    // Update scroll progress
+    if (progressBar) {
+      const scrollTop = window.scrollY;
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const pct = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+      progressBar.style.width = pct + "%";
     }
   }, { passive: true });
 
